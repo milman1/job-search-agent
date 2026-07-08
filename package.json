@@ -1,0 +1,17 @@
+{
+    "name": "job-search-agent",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Daily job-search agent: polls Greenhouse/Lever boards, scores matches with Claude, alerts via Discord.",
+    "engines": {
+        "node": ">=20"
+    },
+    "scripts": {
+        "start": "node src/index.js",
+        "test": "node --test"
+    },
+    "dependencies": {
+        "@supabase/supabase-js": "^2.49.8"
+    }
+}

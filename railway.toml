@@ -1,0 +1,10 @@
+# Railway cron service: runs weekdays at 11:00 UTC (7am ET during daylight
+# saving; 6am ET in winter — bump to "0 12 * * 1-5" each November if you
+# want a constant 7am).
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npm start"
+cronSchedule = "0 11 * * 1-5"
+restartPolicyType = "never"
