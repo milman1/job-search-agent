@@ -95,10 +95,10 @@ export async function getSubmitter(env = process.env) {
         return greenhouseApiSubmitter(token);
     }
     if (mode === "browser") {
-        if (!env.BROWSERBASE_API_KEY || !env.BROWSERBASE_PROJECT_ID) {
-            console.log(
-                "APPLY_MODE=browser but BROWSERBASE_API_KEY/BROWSERBASE_PROJECT_ID are not set; falling back to prepare.",
-            );
+        // BROWSERBASE_PROJECT_ID is optional — Browserbase infers the project
+        // from the API key when it's omitted.
+        if (!env.BROWSERBASE_API_KEY) {
+            console.log("APPLY_MODE=browser but BROWSERBASE_API_KEY is not set; falling back to prepare.");
             return prepareSubmitter();
         }
         const { browserSubmitter } = await import("./browser.js");

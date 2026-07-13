@@ -77,19 +77,22 @@ export async function fillForm(page, packet, resumeFile) {
 
 async function createSession(env) {
     const timeout = Number(env.BROWSERBASE_TIMEOUT) || 3600;
+    const payload = {
+        // keepAlive lets the session outlive our process so you can take over
+        // later from your phone (requires a paid Browserbase plan).
+        keepAlive: true,
+        timeout,
+    };
+    // projectId is optional — Browserbase infers it from the API key.
+    if (env.BROWSERBASE_PROJECT_ID) payload.projectId = env.BROWSERBASE_PROJECT_ID;
+
     const res = await fetch(`${BROWSERBASE_API}/sessions`, {
         method: "POST",
         headers: {
             "content-type": "application/json",
             "x-bb-api-key": env.BROWSERBASE_API_KEY,
         },
-        body: JSON.stringify({
-            projectId: env.BROWSERBASE_PROJECT_ID,
-            // keepAlive lets the session outlive our process so you can take
-            // over later from your phone (may require a paid Browserbase plan).
-            keepAlive: true,
-            timeout,
-        }),
+        body: JSON.stringify(payload),
     });
     if (!res.ok) {
         throw new Error(`Browserbase session create failed: HTTP ${res.status} ${await res.text().catch(() => "")}`);
