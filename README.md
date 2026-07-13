@@ -25,6 +25,56 @@ Discord.
    for 7) with verdict, angle, watch point, and apply link.
 8. **Summary** line: `Summary: companies=N matched=N new=N posted=N`.
 
+## Auto-apply (opt-in)
+
+Given your résumé, the agent can also **prepare a tailored, ready-to-submit
+application** for every strong match — not just alert you. Enable it with the
+`--apply` flag or `AUTO_APPLY=1`. For each new match scoring ≥ `APPLY_THRESHOLD`
+(default 7), it:
+
+1. **Fetches the posting's real application form.** Greenhouse exposes every
+   field via `?questions=true` (name, email, résumé, cover letter, and custom
+   dropdown/free-text questions). Lever hides custom questions from its public
+   API, so those forms get the standard fields and are always flagged for a
+   quick human look.
+2. **Auto-fills the standard fields** (name, email, phone, links, résumé text)
+   from `profile.json` + your résumé.
+3. **Drafts the rest with Claude:** a cover letter tailored to the role plus an
+   answer to every custom question, grounded in your résumé. Dropdown answers
+   are validated against the real options — an unmatched answer is dropped
+   rather than submitted.
+4. **Assembles a review-ready packet**, dedup'd against the `applications`
+   table and capped at `APPLY_MAX` per run (default 5), records it, and posts it
+   to Discord showing what was filled, what still needs you, and the apply link.
+
+### Why it prepares instead of blindly clicking submit
+
+Fully unattended submission isn't possible (or ToS-compliant) through the public
+APIs: Greenhouse submission requires the **employer's** private Board Token, and
+Lever's hosted form is reCAPTCHA-protected. So the default `APPLY_MODE=prepare`
+does all the work — tailoring, answers, cover letter — and hands you a packet to
+submit with one click.
+
+Submission is pluggable via `src/submit.js`. If you *do* have a compliant
+backend (an employer/ATS-owner Greenhouse Board Token, or a browser-automation
+worker you run yourself), set `APPLY_MODE=greenhouse-api` +
+`GREENHOUSE_BOARD_TOKEN` and ready packets are POSTed automatically. The packet
+is already fully built, so any submitter drops in behind the same interface.
+
+### Setup
+
+```bash
+cp profile.example.json profile.json   # your details (git-ignored)
+cp resume.example.txt resume.txt        # your résumé as plain text (git-ignored)
+node src/index.js --dry-run --apply     # preview: lists forms + field counts, no spend
+node src/index.js --apply               # full run: prepares/records/posts applications
+```
+
+`profile.json`, `resume.txt`, and common résumé file names are git-ignored so
+your personal data is never committed. The `applications` table must exist with
+a UNIQUE constraint on `url` and columns: `id, url, title, company, source,
+ready, submitted, status, missing_fields, cover_letter, answers, created_at`.
+
 ## Deploy on Railway (two steps)
 
 1. Create a new Railway project from this GitHub repo. The included

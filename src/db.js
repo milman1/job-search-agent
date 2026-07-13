@@ -34,5 +34,31 @@ export function makeDb(url, serviceKey) {
             }
             return !error;
         },
+
+        // Returns the subset of `urls` we've already built an application for,
+        // so a job is never applied to twice.
+        async existingApplications(urls) {
+            const seen = new Set();
+            for (let i = 0; i < urls.length; i += CHUNK) {
+                const chunk = urls.slice(i, i + CHUNK);
+                const { data, error } = await supabase
+                    .from("applications")
+                    .select("url")
+                    .in("url", chunk);
+                if (error) throw new Error(`Supabase select failed: ${error.message}`);
+                for (const row of data ?? []) seen.add(row.url);
+            }
+            return seen;
+        },
+
+        // Records one application attempt; unique-violation is ignored.
+        async insertApplication(row) {
+            const { error } = await supabase.from("applications").insert(row);
+            if (error && error.code !== UNIQUE_VIOLATION) {
+                console.log(`application insert failed for ${row.url}: ${error.message}`);
+                return false;
+            }
+            return !error;
+        },
     };
 }

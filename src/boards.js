@@ -37,6 +37,8 @@ async function fetchGreenhouse(slug) {
             location: job.location?.name ?? "",
             salary: "",
             source: "greenhouse",
+            slug,
+            atsJobId: job.id,
             jdText: buildJdText({
                 location: job.location?.name,
                 description: job.content,
@@ -59,6 +61,9 @@ async function fetchLever(slug) {
             location: job.categories?.location ?? "",
             salary: formatLeverSalary(job.salaryRange),
             source: "lever",
+            slug,
+            atsJobId: job.id,
+            applyUrl: job.applyUrl ?? `${job.hostedUrl}/apply`,
             jdText: buildJdText({
                 location: job.categories?.location,
                 description: job.descriptionPlain || job.description,

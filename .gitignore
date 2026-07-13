@@ -1,3 +1,9 @@
 node_modules/
 .env
 *.log
+
+# Personal data used by the auto-apply engine — never commit real PII.
+profile.json
+resume.txt
+resume.pdf
+resume.docx
