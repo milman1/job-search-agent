@@ -154,6 +154,28 @@ The `job_leads` table must already exist (UNIQUE constraint on `url`). Create
 it — and the optional `applications` table used by `--apply` — by running
 [`schema.sql`](schema.sql) once in the Supabase SQL Editor (or via `psql`).
 
+### Enabling auto-apply on Railway (browser mode)
+
+Browser mode fills each form and uploads your résumé in a **hosted** cloud
+browser (Browserbase), connected over CDP — Railway needs **no local Chromium**,
+just the `playwright-core` dependency that's already installed. To turn it on,
+add these variables alongside the four above:
+
+| Variable | Value |
+| --- | --- |
+| `AUTO_APPLY` | `1` — without this, apply never runs |
+| `APPLY_MODE` | `browser` |
+| `BROWSERBASE_API_KEY` | your Browserbase key (project id is inferred from it) |
+| `BROWSER_AUTO_SUBMIT` | `0` **recommended to start** — fills the form then posts a link for you to approve + submit; set `1` only for fully hands-off, irreversible auto-submit |
+| `APPLY_DAILY_MAX` | applications per day across runs (default 3) |
+
+> **Your résumé and `profile.json` must be present in the container.** They are
+> git-ignored, so a fresh Railway deploy won't include them and the apply step
+> will error on load. Either commit them to this **private** repo (and set
+> `RESUME_FILE` to the PDF's path), or provision them from env at startup so
+> personal files stay out of git. Auto-apply stays off until `AUTO_APPLY=1`, so
+> scoring + Discord alerts work with none of this configured.
+
 ## Adding companies
 
 Append to `companies.json`:
