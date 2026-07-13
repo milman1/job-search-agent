@@ -140,6 +140,12 @@ before you run with `--apply` — create it (and `job_leads`) from
 
 That's it — the service runs `npm start` on the schedule and exits.
 
+> **Anthropic key name:** the app reads `ANTHROPIC_API_KEY`. If your host
+> already occupies that name with its own platform key (some managed agent
+> environments do), set `JOB_AGENT_ANTHROPIC_KEY` instead — it takes
+> precedence. Railway does not have this collision, so `ANTHROPIC_API_KEY` is
+> all you need there.
+
 > **Timezone note:** Railway cron is UTC. `0 11 * * 1-5` is 7am ET during
 > daylight saving but 6am ET in winter; switch to `0 12 * * 1-5` each
 > November if you want a constant 7am.
@@ -147,6 +153,33 @@ That's it — the service runs `npm start` on the schedule and exits.
 The `job_leads` table must already exist (UNIQUE constraint on `url`). Create
 it — and the optional `applications` table used by `--apply` — by running
 [`schema.sql`](schema.sql) once in the Supabase SQL Editor (or via `psql`).
+
+### Enabling auto-apply on Railway (browser mode)
+
+Browser mode fills each form and uploads your résumé in a **hosted** cloud
+browser (Browserbase), connected over CDP — Railway needs **no local Chromium**,
+just the `playwright-core` dependency that's already installed. To turn it on,
+add these variables alongside the four above:
+
+| Variable | Value |
+| --- | --- |
+| `AUTO_APPLY` | `1` — without this, apply never runs |
+| `APPLY_MODE` | `browser` |
+| `BROWSERBASE_API_KEY` | your Browserbase key (project id is inferred from it) |
+| `BROWSER_AUTO_SUBMIT` | `0` **recommended to start** — fills the form then posts a link for you to approve + submit; set `1` only for fully hands-off, irreversible auto-submit |
+| `APPLY_DAILY_MAX` | applications per day across runs (default 3) |
+
+> **Your résumé and `profile.json` must reach the container.** They are
+> git-ignored, so a fresh Railway deploy won't include them and the apply step
+> will error on load. Two options:
+> - **Commit them** to this **private** repo and set `RESUME_FILE` to the PDF's path.
+> - **Provision from env** (keeps personal files out of git): set `PROFILE_JSON`
+>   (inline profile contents) and `RESUME_PDF_BASE64` (`base64 -w0 resume.pdf`)
+>   — or `RESUME_TEXT` if you have no PDF — and the app writes them to disk at
+>   startup.
+>
+> Auto-apply stays off until `AUTO_APPLY=1`, so scoring + Discord alerts work
+> with none of this configured.
 
 ## Adding companies
 
