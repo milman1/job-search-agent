@@ -29,7 +29,37 @@ function readTextFile(path, label) {
 // text a job seeker's resume contains.
 const RESUME_MAX_CHARS = 20_000;
 
-export function loadApplicant(env = process.env) {
+const isPdf = (path) => /\.pdf$/i.test(path);
+
+// Extracts plain text from a PDF resume so the same file can serve as both the
+// AI's source material and the uploaded document. pdf-parse is imported lazily
+// so text-only setups don't need it.
+async function extractPdfText(path) {
+    const buffer = readFileSync(path);
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: buffer });
+    try {
+        const { text } = await parser.getText();
+        return text;
+    } finally {
+        await parser.destroy?.().catch(() => {});
+    }
+}
+
+async function loadResumeText(path, label) {
+    if (isPdf(path)) {
+        try {
+            return (await extractPdfText(path)).trim();
+        } catch (err) {
+            throw new Error(
+                `Could not extract text from ${label} PDF at ${path}: ${err instanceof Error ? err.message : err}`,
+            );
+        }
+    }
+    return readTextFile(path, label).trim();
+}
+
+export async function loadApplicant(env = process.env) {
     const profilePath = resolvePath(env.PROFILE_PATH || "profile.json");
     const profileRaw = readTextFile(profilePath, "profile");
 
@@ -49,20 +79,7 @@ export function loadApplicant(env = process.env) {
         throw new Error(`profile.json is missing required fields: ${missing.join(", ")}`);
     }
 
-    const resumePath = resolvePath(env.RESUME_PATH || profile.resumePath || "resume.txt");
-    let resumeText = readTextFile(resumePath, "resume").trim();
-    if (!resumeText) {
-        throw new Error(`resume file at ${resumePath} is empty`);
-    }
-    if (resumeText.length > RESUME_MAX_CHARS) {
-        resumeText = resumeText.slice(0, RESUME_MAX_CHARS);
-    }
-
-    const resumeFilename = resumePath.split("/").pop() || "resume.txt";
-
-    // Optional: the actual file uploaded into application forms (e.g. a PDF).
-    // Falls back to profile.resumeFile. When absent, browser mode fills text
-    // fields but leaves the file upload for you.
+    // The file uploaded into application forms (e.g. a PDF), if provided.
     let resumeFile = null;
     const resumeFileRaw = env.RESUME_FILE || profile.resumeFile;
     if (resumeFileRaw) {
@@ -71,6 +88,29 @@ export function loadApplicant(env = process.env) {
             throw new Error(`RESUME_FILE points to a missing file: ${resumeFile}`);
         }
     }
+
+    // Where the resume TEXT comes from. Precedence: an explicit RESUME_PATH /
+    // profile.resumePath; otherwise the upload file itself when it's a PDF (so a
+    // single PDF works for both); otherwise the default resume.txt.
+    const explicitTextRaw = env.RESUME_PATH || profile.resumePath;
+    let textPath;
+    if (explicitTextRaw) textPath = resolvePath(explicitTextRaw);
+    else if (resumeFile && isPdf(resumeFile)) textPath = resumeFile;
+    else textPath = resolvePath("resume.txt");
+
+    let resumeText = await loadResumeText(textPath, "resume");
+    if (!resumeText) {
+        throw new Error(`resume at ${textPath} produced no text`);
+    }
+    if (resumeText.length > RESUME_MAX_CHARS) {
+        resumeText = resumeText.slice(0, RESUME_MAX_CHARS);
+    }
+
+    // If no explicit upload file was set but the text came from a PDF, use that
+    // PDF as the upload document too.
+    if (!resumeFile && isPdf(textPath)) resumeFile = textPath;
+
+    const resumeFilename = (resumeFile || textPath).split("/").pop() || "resume.txt";
 
     return { profile, resumeText, resumeFilename, resumeFile };
 }

@@ -5,8 +5,9 @@ node_modules/
 # Personal data used by the auto-apply engine — never commit real PII.
 profile.json
 resume.txt
-resume.pdf
-resume.docx
+# Résumé documents (any PDF/DOCX) — treated as personal data.
+*.pdf
+*.docx
 
 # Generated cover letters (contain resume-derived content).
 cover-letters/

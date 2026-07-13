@@ -11,5 +11,5 @@
   "requiresSponsorship": false,
   "salaryExpectation": "180000",
   "yearsExperience": 10,
-  "resumePath": "resume.txt"
+  "resumeFile": "resume.pdf"
 }

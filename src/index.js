@@ -55,7 +55,7 @@ async function main() {
         if (APPLY || COVER_LETTERS) {
             // Read-only preview: validates the resume/profile load and reports
             // what would be produced. No scoring/Claude/DB.
-            const applicant = loadApplicant();
+            const applicant = await loadApplicant();
             console.log(
                 `Loaded resume for ${applicant.profile.firstName} ${applicant.profile.lastName} (${applicant.resumeText.length} chars).`,
             );
@@ -124,7 +124,7 @@ async function main() {
     let applyResult = { prepared: 0, submitted: 0 };
     let coverResult = { written: 0 };
     if (APPLY || COVER_LETTERS) {
-        const applicant = loadApplicant();
+        const applicant = await loadApplicant();
         if (COVER_LETTERS) {
             coverResult = await generateCoverLetters({
                 matched: applyCandidates,

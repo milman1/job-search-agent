@@ -96,15 +96,21 @@ but where that click happens is configurable via `src/submit.js`:
 
 ```bash
 cp profile.example.json profile.json   # your details (git-ignored)
-cp resume.example.txt resume.txt        # your résumé as plain text (git-ignored)
+# Provide your résumé as a PDF — its text is auto-extracted for the AI and the
+# same file is uploaded into forms. (A plain-text resume.txt also works.)
+export RESUME_FILE=resume.pdf
 node src/index.js --dry-run --apply     # preview: lists forms + field counts, no spend
 node src/index.js --apply               # full run (prepare mode by default)
 
 # Hands-off cloud browser + phone approval, a few a day, PDF upload:
-export APPLY_MODE=browser RESUME_FILE=resume.pdf
-export BROWSERBASE_API_KEY=... BROWSERBASE_PROJECT_ID=...
+export APPLY_MODE=browser
+export BROWSERBASE_API_KEY=...          # project id is inferred from the key
 node src/index.js --apply
 ```
+
+Your résumé can be a single **PDF**: set `RESUME_FILE=resume.pdf` (or
+`"resumeFile"` in `profile.json`) and the tool extracts its text for tailoring
+*and* uploads the file itself in browser mode — no separate `resume.txt` needed.
 
 `profile.json`, `resume.txt`, and common résumé file names are git-ignored so
 your personal data is never committed. The `applications` table must exist with
