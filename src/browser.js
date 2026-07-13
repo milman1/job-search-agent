@@ -4,10 +4,11 @@
 //
 //   * Paid Browserbase (keepAlive): the session outlives our run, so we hand
 //     back a live-view link and you finish on your phone whenever.
-//   * Free Browserbase: the session ends when our run disconnects, so we either
-//     hold the connection open for a short review window (BROWSER_REVIEW_WINDOW)
-//     while you act via the live link, or auto-submit (BROWSER_AUTO_SUBMIT) with
-//     captcha solving so it's fully hands-off.
+//   * Free Browserbase: the session ends when our run disconnects, so by
+//     default we auto-submit (fill + solve captcha + click Submit) — but only
+//     when every required field was filled; otherwise the form is held for
+//     review. Set BROWSER_AUTO_SUBMIT=0 for review-only, optionally with
+//     BROWSER_REVIEW_WINDOW to hold the session open while you act via the link.
 //
 // Captcha solving (browserSettings.solveCaptchas) is on by default.
 //
@@ -152,7 +153,9 @@ async function liveViewUrl(sessionId, env) {
 // called as soon as the review link is ready so free-plan users can act during
 // the open review window.
 export function browserSubmitter(env) {
-    const autoSubmit = env.BROWSER_AUTO_SUBMIT === "1";
+    // Auto-submit is the default for browser mode; set BROWSER_AUTO_SUBMIT=0 to
+    // switch to review-only (fill + hand you the live link).
+    const autoSubmit = env.BROWSER_AUTO_SUBMIT !== "0";
     const reviewWindowMs = (Number(env.BROWSER_REVIEW_WINDOW) || 0) * 1000;
 
     return {
@@ -181,7 +184,10 @@ export function browserSubmitter(env) {
                 const { filled, failed } = await fillForm(page, packet, applicant?.resumeFile);
                 const reviewUrl = await liveViewUrl(session.id, env);
 
-                if (autoSubmit) {
+                // Only auto-submit when every required field was fillable. An
+                // incomplete packet (or any Lever form, whose questions aren't
+                // exposed) is held for review instead of submitted blind.
+                if (autoSubmit && packet.ready) {
                     const clicked = await clickSubmit(page);
                     const result = {
                         submitted: clicked,
@@ -197,12 +203,15 @@ export function browserSubmitter(env) {
                     return result;
                 }
 
+                const heldReason = autoSubmit
+                    ? `not auto-submitted — ${packet.missing.length ? `missing: ${packet.missing.join(", ")}` : "form not fully verifiable"}`
+                    : "awaiting your review";
                 const result = {
                     submitted: false,
-                    status: "awaiting-review",
+                    status: autoSubmit ? "held-for-review" : "awaiting-review",
                     reviewUrl,
                     sessionId: session.id,
-                    detail: `filled ${filled} field(s), ${failed} left for review`,
+                    detail: `filled ${filled} field(s), ${failed} left for review — ${heldReason}`,
                 };
                 // Post the review link now, then hold the connection open so a
                 // free-plan session stays alive while you act on your phone.

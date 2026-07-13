@@ -88,12 +88,14 @@ but where that click happens is configurable via `src/submit.js`:
   - **Paid (`BROWSERBASE_KEEP_ALIVE=1`):** the filled session persists after the
     run, so it posts a **live link** you open on your **phone** to review and tap
     Submit whenever. This is the "fill now, submit later" flow.
-  - **Free plan:** the session ends when the run disconnects, so pick one:
-    - `BROWSER_REVIEW_WINDOW=300` — holds the session open ~5 min after filling
-      and posts the live link so you can submit from your phone *while it's live*.
-    - `BROWSER_AUTO_SUBMIT=1` — after filling + solving the captcha, clicks Submit
-      for a fully hands-off apply. **This sends the application without your
-      review** — use with care.
+  - **Free plan:** the session ends when the run disconnects. Browser mode
+    **auto-submits by default**: after filling + solving the captcha it clicks
+    Submit for a fully hands-off apply. As a safety, it only submits when every
+    required field was filled — incomplete forms (and all Lever forms, whose
+    questions aren't API-visible) are *held for review* and surfaced in Discord
+    instead of submitted blind. Set `BROWSER_AUTO_SUBMIT=0` to switch to
+    review-only, optionally with `BROWSER_REVIEW_WINDOW=300` to hold the session
+    open ~5 min so you can submit from the live link while it's alive.
   > Note: this path talks to your Browserbase account and the live form, so it
   > could not be exercised in CI; field-filling and the submit click are
   > best-effort, and anything that doesn't stick (e.g. custom dropdown widgets)
