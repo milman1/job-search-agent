@@ -1,20 +1,36 @@
 import { generateApplication } from "./answer.js";
 import { fetchApplicationForm } from "./questions.js";
-import { assemblePacket, questionsToAnswer } from "./packet.js";
+import { assemblePacket, coverLetterRequired, questionsToAnswer } from "./packet.js";
 
-// Fetches the posting's real application form, has Claude draft answers +
-// cover letter from the resume, and assembles a review-ready packet.
+// Fetches the posting's real application form, has Claude draft answers (and a
+// cover letter ONLY when the form requires one) from the resume, and assembles
+// a review-ready packet.
 export async function prepareApplication({ job, applicant, apiKey }) {
     const form = await fetchApplicationForm(job);
     const questions = questionsToAnswer(form.fields);
+    // Lever hides its form from the API, so we can't be sure a cover letter
+    // isn't required — include one for Lever; for Greenhouse, only when the
+    // form marks it required.
+    const includeCoverLetter = form.source === "lever" || coverLetterRequired(form);
     const generated = await generateApplication({
         job,
         profile: applicant.profile,
         resumeText: applicant.resumeText,
         questions,
         apiKey,
+        includeCoverLetter,
     });
     return assemblePacket({ job, form, applicant, generated });
+}
+
+// How many applications we're allowed to do this run: the smaller of the
+// per-run cap and whatever's left of the daily budget. Never negative.
+export function dailyBudget({ dailyMax, todayCount, perRunCap }) {
+    return Math.max(0, Math.min(perRunCap, dailyMax - todayCount));
+}
+
+export function startOfUtcDay(now = new Date()) {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
 }
 
 function applicationRow(packet, result) {
@@ -26,6 +42,7 @@ function applicationRow(packet, result) {
         ready: packet.ready,
         submitted: Boolean(result?.submitted),
         status: result?.status ?? "prepared",
+        review_url: result?.reviewUrl ?? null,
         missing_fields: packet.missing.join(", ") || null,
         cover_letter: packet.coverLetter || null,
         answers: JSON.stringify(
@@ -88,7 +105,7 @@ export async function applyToJobs({
             continue;
         }
 
-        const result = await submitter.submit(packet);
+        const result = await submitter.submit(packet, { applicant });
         prepared++;
         if (result.submitted) submitted++;
 
@@ -97,9 +114,11 @@ export async function applyToJobs({
 
         const state = result.submitted
             ? "submitted"
-            : packet.ready
-              ? "prepared (ready)"
-              : `prepared (needs review: ${packet.missing.join(", ") || "custom questions"})`;
+            : result.reviewUrl
+              ? `filled — awaiting your approval: ${result.reviewUrl}`
+              : packet.ready
+                ? "prepared (ready)"
+                : `prepared (needs review: ${packet.missing.join(", ") || "custom questions"})`;
         console.log(`apply: ${state} — ${job.title} @ ${job.company}`);
     }
 

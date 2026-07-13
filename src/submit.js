@@ -84,7 +84,7 @@ function greenhouseApiSubmitter(token) {
     };
 }
 
-export function getSubmitter(env = process.env) {
+export async function getSubmitter(env = process.env) {
     const mode = env.APPLY_MODE || "prepare";
     if (mode === "greenhouse-api") {
         const token = env.GREENHOUSE_BOARD_TOKEN;
@@ -93,6 +93,16 @@ export function getSubmitter(env = process.env) {
             return prepareSubmitter();
         }
         return greenhouseApiSubmitter(token);
+    }
+    if (mode === "browser") {
+        if (!env.BROWSERBASE_API_KEY || !env.BROWSERBASE_PROJECT_ID) {
+            console.log(
+                "APPLY_MODE=browser but BROWSERBASE_API_KEY/BROWSERBASE_PROJECT_ID are not set; falling back to prepare.",
+            );
+            return prepareSubmitter();
+        }
+        const { browserSubmitter } = await import("./browser.js");
+        return browserSubmitter(env);
     }
     return prepareSubmitter();
 }

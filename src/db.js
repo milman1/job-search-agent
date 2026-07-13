@@ -51,6 +51,17 @@ export function makeDb(url, serviceKey) {
             return seen;
         },
 
+        // Counts applications recorded at/after `sinceIso` — used to enforce a
+        // "few per day" budget across runs.
+        async countApplicationsSince(sinceIso) {
+            const { count, error } = await supabase
+                .from("applications")
+                .select("url", { count: "exact", head: true })
+                .gte("created_at", sinceIso);
+            if (error) throw new Error(`Supabase count failed: ${error.message}`);
+            return count ?? 0;
+        },
+
         // Records one application attempt; unique-violation is ignored.
         async insertApplication(row) {
             const { error } = await supabase.from("applications").insert(row);

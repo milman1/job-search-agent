@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildCoverLetterPrompt, parseAnswerResponse } from "../src/answer.js";
+import { dailyBudget } from "../src/apply.js";
+import { fieldSelectors } from "../src/browser.js";
 import { coverLetterSlug, renderCoverLetterFile } from "../src/coverletter.js";
 import { buildApplicationEmbed, buildCoverLetterEmbed } from "../src/discord.js";
-import { assemblePacket, questionsToAnswer } from "../src/packet.js";
+import { assemblePacket, coverLetterRequired, questionsToAnswer } from "../src/packet.js";
 import { leverStandardForm, normalizeGreenhouseQuestions } from "../src/questions.js";
 import { buildGreenhouseSubmission, getSubmitter } from "../src/submit.js";
 
@@ -173,14 +175,19 @@ test("buildGreenhouseSubmission maps fields, selects, and resume_text", () => {
 });
 
 test("getSubmitter defaults to prepare and never submits", async () => {
-    const submitter = getSubmitter({});
+    const submitter = await getSubmitter({});
     assert.equal(submitter.mode, "prepare");
     const result = await submitter.submit({ ready: true });
     assert.deepEqual(result, { submitted: false, status: "prepared" });
 });
 
-test("getSubmitter falls back to prepare when greenhouse token missing", () => {
-    const submitter = getSubmitter({ APPLY_MODE: "greenhouse-api" });
+test("getSubmitter falls back to prepare when greenhouse token missing", async () => {
+    const submitter = await getSubmitter({ APPLY_MODE: "greenhouse-api" });
+    assert.equal(submitter.mode, "prepare");
+});
+
+test("getSubmitter falls back to prepare when browser creds missing", async () => {
+    const submitter = await getSubmitter({ APPLY_MODE: "browser" });
     assert.equal(submitter.mode, "prepare");
 });
 
@@ -235,6 +242,32 @@ test("buildCoverLetterPrompt grounds on the resume and forbids invention", () =>
     assert.match(prompt, /Avi Milman/);
     assert.match(prompt, /\$6\.4M pipeline/);
     assert.match(prompt, /never invent/i);
+});
+
+test("coverLetterRequired is true only when a required cover-letter field exists", () => {
+    const optional = normalizeGreenhouseQuestions(GH_QUESTIONS);
+    assert.equal(coverLetterRequired({ fields: optional }), false);
+
+    const required = normalizeGreenhouseQuestions([
+        { label: "Cover Letter", required: true, fields: [{ name: "cover_letter_text", type: "textarea", values: [] }] },
+    ]);
+    assert.equal(coverLetterRequired({ fields: required }), true);
+});
+
+test("dailyBudget clamps to remaining daily allowance and per-run cap", () => {
+    assert.equal(dailyBudget({ dailyMax: 3, todayCount: 0, perRunCap: 5 }), 3);
+    assert.equal(dailyBudget({ dailyMax: 3, todayCount: 2, perRunCap: 5 }), 1);
+    assert.equal(dailyBudget({ dailyMax: 3, todayCount: 3, perRunCap: 5 }), 0);
+    assert.equal(dailyBudget({ dailyMax: 3, todayCount: 5, perRunCap: 5 }), 0);
+    assert.equal(dailyBudget({ dailyMax: 10, todayCount: 0, perRunCap: 2 }), 2);
+});
+
+test("fieldSelectors returns name and id candidates, handling [] suffix", () => {
+    assert.deepEqual(fieldSelectors("first_name"), ['[name="first_name"]', "#first_name"]);
+    const multi = fieldSelectors("question_9[]");
+    assert.ok(multi.includes('[name="question_9[]"]'));
+    assert.ok(multi.includes('[name="question_9"]'));
+    assert.ok(multi.includes("#question_9"));
 });
 
 test("buildCoverLetterEmbed formats title, body, and apply link", () => {

@@ -60,29 +60,37 @@ application** for every strong match — not just alert you. Enable it with the
    dropdown/free-text questions). Lever hides custom questions from its public
    API, so those forms get the standard fields and are always flagged for a
    quick human look.
-2. **Auto-fills the standard fields** (name, email, phone, links, résumé text)
+2. **Auto-fills the standard fields** (name, email, phone, links, résumé)
    from `profile.json` + your résumé.
-3. **Drafts the rest with Claude:** a cover letter tailored to the role plus an
-   answer to every custom question, grounded in your résumé. Dropdown answers
-   are validated against the real options — an unmatched answer is dropped
-   rather than submitted.
-4. **Assembles a review-ready packet**, dedup'd against the `applications`
-   table and capped at `APPLY_MAX` per run (default 5), records it, and posts it
-   to Discord showing what was filled, what still needs you, and the apply link.
+3. **Drafts the rest with Claude:** an answer to every custom question, grounded
+   in your résumé, plus a cover letter **only when the form requires one**.
+   Dropdown answers are validated against the real options — an unmatched answer
+   is dropped rather than submitted.
+4. **Records + posts each application**, dedup'd against the `applications`
+   table. Capped at `APPLY_MAX` per run (default 5) **and `APPLY_DAILY_MAX` per
+   day across runs (default 3)** — "a few a day." Posts to Discord showing what
+   was filled, what still needs you, and the link.
 
-### Why it prepares instead of blindly clicking submit
+### Submission backends (`APPLY_MODE`)
 
-Fully unattended submission isn't possible (or ToS-compliant) through the public
-APIs: Greenhouse submission requires the **employer's** private Board Token, and
-Lever's hosted form is reCAPTCHA-protected. So the default `APPLY_MODE=prepare`
-does all the work — tailoring, answers, cover letter — and hands you a packet to
-submit with one click.
+Fully unattended, no-human submission isn't possible (or ToS-compliant) via the
+public APIs: Greenhouse submission needs the **employer's** private Board Token,
+and Lever's form is reCAPTCHA-protected. So the final click is always yours —
+but where that click happens is configurable via `src/submit.js`:
 
-Submission is pluggable via `src/submit.js`. If you *do* have a compliant
-backend (an employer/ATS-owner Greenhouse Board Token, or a browser-automation
-worker you run yourself), set `APPLY_MODE=greenhouse-api` +
-`GREENHOUSE_BOARD_TOKEN` and ready packets are POSTed automatically. The packet
-is already fully built, so any submitter drops in behind the same interface.
+- **`prepare`** (default) — builds a review-ready packet; you open the link and
+  submit yourself from any device.
+- **`browser`** — **fills the form and uploads your résumé in a hosted cloud
+  browser** ([Browserbase](https://browserbase.com)), then posts you a **live
+  session link**. Open it on your **phone**, clear the reCAPTCHA, and tap Submit.
+  Your computer never has to be on. Requires `BROWSERBASE_API_KEY`,
+  `BROWSERBASE_PROJECT_ID`, and `RESUME_FILE` (your PDF). Nothing auto-submits —
+  the final click stays with you.
+  > Note: this path talks to your Browserbase account and the live form, so it
+  > could not be exercised in CI; the field-filling is best-effort and anything
+  > that doesn't stick (e.g. custom dropdown widgets) is left for your review.
+- **`greenhouse-api`** — POSTs ready packets using an employer/ATS-owner
+  Greenhouse Board Token (`GREENHOUSE_BOARD_TOKEN`). Not available to job seekers.
 
 ### Setup
 
@@ -90,13 +98,20 @@ is already fully built, so any submitter drops in behind the same interface.
 cp profile.example.json profile.json   # your details (git-ignored)
 cp resume.example.txt resume.txt        # your résumé as plain text (git-ignored)
 node src/index.js --dry-run --apply     # preview: lists forms + field counts, no spend
-node src/index.js --apply               # full run: prepares/records/posts applications
+node src/index.js --apply               # full run (prepare mode by default)
+
+# Hands-off cloud browser + phone approval, a few a day, PDF upload:
+export APPLY_MODE=browser RESUME_FILE=resume.pdf
+export BROWSERBASE_API_KEY=... BROWSERBASE_PROJECT_ID=...
+node src/index.js --apply
 ```
 
 `profile.json`, `resume.txt`, and common résumé file names are git-ignored so
 your personal data is never committed. The `applications` table must exist with
-a UNIQUE constraint on `url` and columns: `id, url, title, company, source,
-ready, submitted, status, missing_fields, cover_letter, answers, created_at`.
+a UNIQUE constraint on `url`, a `created_at timestamptz default now()` column
+(used for the daily budget), and columns: `id, url, title, company, source,
+ready, submitted, status, review_url, missing_fields, cover_letter, answers,
+created_at`.
 
 ## Deploy on Railway (two steps)
 

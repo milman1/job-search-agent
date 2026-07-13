@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // Standard profile fields the apply pipeline knows how to map onto ATS forms.
@@ -60,5 +60,17 @@ export function loadApplicant(env = process.env) {
 
     const resumeFilename = resumePath.split("/").pop() || "resume.txt";
 
-    return { profile, resumeText, resumeFilename };
+    // Optional: the actual file uploaded into application forms (e.g. a PDF).
+    // Falls back to profile.resumeFile. When absent, browser mode fills text
+    // fields but leaves the file upload for you.
+    let resumeFile = null;
+    const resumeFileRaw = env.RESUME_FILE || profile.resumeFile;
+    if (resumeFileRaw) {
+        resumeFile = resolvePath(resumeFileRaw);
+        if (!existsSync(resumeFile)) {
+            throw new Error(`RESUME_FILE points to a missing file: ${resumeFile}`);
+        }
+    }
+
+    return { profile, resumeText, resumeFilename, resumeFile };
 }

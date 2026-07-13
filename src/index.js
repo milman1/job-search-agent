@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { fileURLToPath as _fileURLToPath } from "node:url";
-import { applyToJobs } from "./apply.js";
+import { applyToJobs, dailyBudget, startOfUtcDay } from "./apply.js";
 import { pollBoards } from "./boards.js";
 import { generateCoverLetters } from "./coverletter.js";
 import { makeDb } from "./db.js";
@@ -17,6 +17,8 @@ const COVER_LETTERS =
 const POST_THRESHOLD = 7;
 const APPLY_THRESHOLD = Number(process.env.APPLY_THRESHOLD) || POST_THRESHOLD;
 const APPLY_MAX = Number(process.env.APPLY_MAX) || 5;
+// "A few a day": cap applications across all of today's runs, not just this one.
+const APPLY_DAILY_MAX = Number(process.env.APPLY_DAILY_MAX) || 3;
 const COVER_LETTER_DIR = process.env.COVER_LETTER_DIR
     ? process.env.COVER_LETTER_DIR
     : _fileURLToPath(new URL("../cover-letters", import.meta.url));
@@ -136,17 +138,29 @@ async function main() {
             });
         }
         if (APPLY) {
-            applyResult = await applyToJobs({
-                matched: applyCandidates,
-                applicant,
-                db,
-                submitter: getSubmitter(),
-                apiKey: process.env.ANTHROPIC_API_KEY,
-                webhookUrl: process.env.DISCORD_WEBHOOK_URL,
-                postApplication,
-                cap: APPLY_MAX,
-                dryRun: false,
+            const todayCount = await db.countApplicationsSince(startOfUtcDay());
+            const cap = dailyBudget({
+                dailyMax: APPLY_DAILY_MAX,
+                todayCount,
+                perRunCap: APPLY_MAX,
             });
+            if (cap === 0) {
+                console.log(
+                    `apply: daily budget reached (${todayCount}/${APPLY_DAILY_MAX} today); skipping.`,
+                );
+            } else {
+                applyResult = await applyToJobs({
+                    matched: applyCandidates,
+                    applicant,
+                    db,
+                    submitter: await getSubmitter(),
+                    apiKey: process.env.ANTHROPIC_API_KEY,
+                    webhookUrl: process.env.DISCORD_WEBHOOK_URL,
+                    postApplication,
+                    cap,
+                    dryRun: false,
+                });
+            }
         }
     }
 

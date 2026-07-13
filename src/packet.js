@@ -65,6 +65,14 @@ export function questionsToAnswer(fields) {
     );
 }
 
+// True only when the form has a REQUIRED cover-letter field. Used to skip
+// cover-letter generation unless the application actually demands one.
+export function coverLetterRequired(form) {
+    return (form.fields ?? []).some(
+        (f) => (f.role === "coverLetter" || f.role === "coverLetterText") && f.required,
+    );
+}
+
 // Combines profile-mapped values, the generated cover letter, and Claude's
 // per-question answers into one ordered, review-ready packet and reports
 // whether every required field could be filled.

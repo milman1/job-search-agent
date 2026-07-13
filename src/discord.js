@@ -31,9 +31,11 @@ export function buildApplicationEmbed(packet, result) {
     const filled = packet.fields.filter((f) => f.source !== "unfilled").length;
     const statusLine = result?.submitted
         ? "✅ Submitted"
-        : packet.ready
-          ? "📝 Ready to submit"
-          : "⚠️ Needs review before submitting";
+        : result?.reviewUrl
+          ? "📱 Filled — tap to review & submit on your phone"
+          : packet.ready
+            ? "📝 Ready to submit"
+            : "⚠️ Needs review before submitting";
 
     const lines = [
         `**${packet.job.company}** — ${packet.source}`,
@@ -49,12 +51,15 @@ export function buildApplicationEmbed(packet, result) {
     if (packet.coverLetter) {
         lines.push("", "**Cover letter:**", packet.coverLetter);
     }
+    if (result?.reviewUrl) {
+        lines.push("", `**[Review & submit (solve captcha) →](${result.reviewUrl})**`);
+    }
     lines.push("", `[Open application →](${packet.applyUrl})`);
 
     return {
         title: `Application: ${packet.job.title}`.slice(0, 256),
         description: lines.join("\n").slice(0, DESC_MAX),
-        color: packet.ready || result?.submitted ? BLUE : ORANGE,
+        color: packet.ready || result?.submitted || result?.reviewUrl ? BLUE : ORANGE,
         fields: packet.fields
             .filter(
                 (f) =>

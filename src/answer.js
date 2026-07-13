@@ -14,10 +14,10 @@ function describeQuestion(q) {
     return parts.join(" ");
 }
 
-export function buildAnswerPrompt({ job, profile, resumeText, questions }) {
+export function buildAnswerPrompt({ job, profile, resumeText, questions, includeCoverLetter = true }) {
     const questionBlock = questions.length
         ? questions.map(describeQuestion).join("\n")
-        : "(none — only a cover letter is needed)";
+        : "(none)";
     const profileLine = JSON.stringify({
         name: `${profile.firstName} ${profile.lastName}`,
         location: profile.location ?? null,
@@ -26,6 +26,10 @@ export function buildAnswerPrompt({ job, profile, resumeText, questions }) {
         salaryExpectation: profile.salaryExpectation ?? null,
         yearsExperience: profile.yearsExperience ?? null,
     });
+
+    const coverLetterInstruction = includeCoverLetter
+        ? "Write a concise, specific cover letter (max ~220 words) tailored to this role, plus answers"
+        : "Do NOT write a cover letter (return an empty string for coverLetter). Provide answers";
 
     return `You are filling out a job application on behalf of a candidate using their real resume. Answer truthfully and ONLY from the resume/profile below — never invent employers, titles, dates, or credentials. Write in the candidate's first person.
 
@@ -37,7 +41,7 @@ ${resumeText}
 JOB: ${job.title} at ${job.company}
 ${job.jdText ?? ""}
 
-Write a concise, specific cover letter (max ~220 words) tailored to this role, plus answers to the application questions below. For select questions you MUST return one of the provided option labels verbatim; for multi-select return an array of option labels. For free-text questions keep answers focused and grounded in the resume. If a question cannot be answered truthfully from the resume/profile, return an empty string for it.
+${coverLetterInstruction} to the application questions below. For select questions you MUST return one of the provided option labels verbatim; for multi-select return an array of option labels. For free-text questions keep answers focused and grounded in the resume. If a question cannot be answered truthfully from the resume/profile, return an empty string for it.
 
 QUESTIONS:
 ${questionBlock}
@@ -156,7 +160,14 @@ export async function generateCoverLetter({ job, profile, resumeText, apiKey }) 
     }
 }
 
-export async function generateApplication({ job, profile, resumeText, questions, apiKey }) {
+export async function generateApplication({
+    job,
+    profile,
+    resumeText,
+    questions,
+    apiKey,
+    includeCoverLetter = true,
+}) {
     try {
         const res = await fetch(ANTHROPIC_URL, {
             method: "POST",
@@ -170,7 +181,10 @@ export async function generateApplication({ job, profile, resumeText, questions,
                 model: MODEL,
                 max_tokens: 1500,
                 messages: [
-                    { role: "user", content: buildAnswerPrompt({ job, profile, resumeText, questions }) },
+                    {
+                        role: "user",
+                        content: buildAnswerPrompt({ job, profile, resumeText, questions, includeCoverLetter }),
+                    },
                 ],
             }),
         });
