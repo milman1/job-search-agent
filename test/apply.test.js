@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseAnswerResponse } from "../src/answer.js";
-import { buildApplicationEmbed } from "../src/discord.js";
+import { buildCoverLetterPrompt, parseAnswerResponse } from "../src/answer.js";
+import { coverLetterSlug, renderCoverLetterFile } from "../src/coverletter.js";
+import { buildApplicationEmbed, buildCoverLetterEmbed } from "../src/discord.js";
 import { assemblePacket, questionsToAnswer } from "../src/packet.js";
 import { leverStandardForm, normalizeGreenhouseQuestions } from "../src/questions.js";
 import { buildGreenhouseSubmission, getSubmitter } from "../src/submit.js";
@@ -204,4 +205,45 @@ test("buildApplicationEmbed summarizes state, missing fields, and cover letter",
     assert.equal(embed.color, 0xf59e0b);
     assert.equal(embed.fields.length, 1);
     assert.equal(embed.fields[0].name, "Why?");
+});
+
+test("coverLetterSlug produces a filesystem-safe base name", () => {
+    assert.equal(
+        coverLetterSlug({ company: "Ramp", title: "Head of Growth & Marketing!" }),
+        "ramp-head-of-growth-marketing",
+    );
+    assert.equal(coverLetterSlug({ company: "", title: "" }), "cover-letter");
+});
+
+test("renderCoverLetterFile includes header, apply link, and body", () => {
+    const out = renderCoverLetterFile(
+        { title: "Head of Growth", company: "Ramp", url: "https://x/1" },
+        "Dear hiring team, ...",
+    );
+    assert.match(out, /# Head of Growth — Ramp/);
+    assert.match(out, /Apply: https:\/\/x\/1/);
+    assert.match(out, /Dear hiring team/);
+});
+
+test("buildCoverLetterPrompt grounds on the resume and forbids invention", () => {
+    const prompt = buildCoverLetterPrompt({
+        job: { title: "Head of Growth", company: "Ramp", jdText: "Own demand gen." },
+        profile: { firstName: "Avi", lastName: "Milman", location: "NYC" },
+        resumeText: "Drove $6.4M pipeline.",
+    });
+    assert.match(prompt, /Head of Growth at Ramp/);
+    assert.match(prompt, /Avi Milman/);
+    assert.match(prompt, /\$6\.4M pipeline/);
+    assert.match(prompt, /never invent/i);
+});
+
+test("buildCoverLetterEmbed formats title, body, and apply link", () => {
+    const embed = buildCoverLetterEmbed(
+        { title: "Head of Growth", company: "Ramp", url: "https://x/1", location: "NYC" },
+        "Dear team, I would love to join.",
+    );
+    assert.equal(embed.title, "Cover letter: Head of Growth");
+    assert.match(embed.description, /Dear team, I would love to join\./);
+    assert.match(embed.description, /\[Apply →\]\(https:\/\/x\/1\)/);
+    assert.equal(embed.color, 0x5865f2);
 });

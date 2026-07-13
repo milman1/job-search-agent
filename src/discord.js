@@ -92,6 +92,38 @@ export async function postApplication(webhookUrl, packet, result) {
     }
 }
 
+export function buildCoverLetterEmbed(job, text) {
+    const lines = [`**${job.company}** — ${job.title}`];
+    if (job.location) lines.push(`📍 ${job.location}`);
+    lines.push("", text);
+    if (job.url) lines.push("", `[Apply →](${job.url})`);
+    return {
+        title: `Cover letter: ${job.title}`.slice(0, 256),
+        description: lines.join("\n").slice(0, DESC_MAX),
+        color: BLUE,
+    };
+}
+
+export async function postCoverLetter(webhookUrl, job, text) {
+    try {
+        const res = await fetch(webhookUrl, {
+            method: "POST",
+            signal: AbortSignal.timeout(15_000),
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ embeds: [buildCoverLetterEmbed(job, text)] }),
+        });
+        if (!res.ok) {
+            throw new Error(`Discord HTTP ${res.status}: ${await res.text()}`);
+        }
+        return true;
+    } catch (err) {
+        console.log(
+            `discord cover letter post failed for ${job.url}: ${err instanceof Error ? err.message : err}`,
+        );
+        return false;
+    }
+}
+
 export async function postToDiscord(webhookUrl, job, scored) {
     try {
         const res = await fetch(webhookUrl, {

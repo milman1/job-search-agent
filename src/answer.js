@@ -105,6 +105,57 @@ export function parseAnswerResponse(text, questions) {
     return { coverLetter, answers };
 }
 
+export function buildCoverLetterPrompt({ job, profile, resumeText }) {
+    return `Write a cover letter for this candidate applying to the job below. Use ONLY facts from the resume/profile — never invent employers, titles, metrics, dates, or credentials. Write in the candidate's first person, warm but concise (~250 words), with a specific hook tied to this company/role and 2-3 concrete, quantified achievements from the resume. No placeholders, no "[Your Name]" — sign off with the candidate's real name. Return ONLY the letter text, no preamble, no markdown.
+
+CANDIDATE: ${profile.firstName} ${profile.lastName}${profile.location ? ` — ${profile.location}` : ""}
+
+RESUME:
+${resumeText}
+
+JOB: ${job.title} at ${job.company}
+${job.jdText ?? ""}`;
+}
+
+// Generates a single tailored cover letter as plain text. Returns "" on any
+// failure so the caller can skip cleanly.
+export async function generateCoverLetter({ job, profile, resumeText, apiKey }) {
+    try {
+        const res = await fetch(ANTHROPIC_URL, {
+            method: "POST",
+            signal: AbortSignal.timeout(60_000),
+            headers: {
+                "content-type": "application/json",
+                "x-api-key": apiKey,
+                "anthropic-version": "2023-06-01",
+            },
+            body: JSON.stringify({
+                model: MODEL,
+                max_tokens: 800,
+                messages: [
+                    { role: "user", content: buildCoverLetterPrompt({ job, profile, resumeText }) },
+                ],
+            }),
+        });
+        if (!res.ok) {
+            const body = await res.text().catch(() => "");
+            throw new Error(`Anthropic HTTP ${res.status}: ${body.slice(0, 200)}`);
+        }
+        const data = await res.json();
+        const text = (data.content ?? [])
+            .filter((block) => block.type === "text")
+            .map((block) => block.text)
+            .join("")
+            .trim();
+        return text.slice(0, COVER_LETTER_MAX);
+    } catch (err) {
+        console.log(
+            `cover letter failed for "${job.title}" at ${job.company}: ${err instanceof Error ? err.message : err}`,
+        );
+        return "";
+    }
+}
+
 export async function generateApplication({ job, profile, resumeText, questions, apiKey }) {
     try {
         const res = await fetch(ANTHROPIC_URL, {

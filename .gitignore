@@ -7,3 +7,6 @@ profile.json
 resume.txt
 resume.pdf
 resume.docx
+
+# Generated cover letters (contain resume-derived content).
+cover-letters/

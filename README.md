@@ -25,6 +25,29 @@ Discord.
    for 7) with verdict, angle, watch point, and apply link.
 8. **Summary** line: `Summary: companies=N matched=N new=N posted=N`.
 
+## Cover letters (opt-in)
+
+Given your résumé, the agent can generate a **tailored cover letter for every
+strong match** and provide it to you. Enable with `--cover-letters` or
+`COVER_LETTERS=1`. For each new match scoring ≥ `APPLY_THRESHOLD` (default 7) it
+asks Claude to write a concise, first-person letter grounded strictly in your
+résumé (no invented employers, titles, or metrics), then **delivers it**:
+
+- **Saved to a file** at `cover-letters/<company>-<title>.md` (dir configurable
+  via `COVER_LETTER_DIR`; git-ignored so résumé-derived content isn't
+  committed).
+- **Posted to Discord** as an embed with the letter and the apply link.
+
+```bash
+cp profile.example.json profile.json    # your details (git-ignored)
+cp resume.example.txt resume.txt          # your résumé as plain text (git-ignored)
+node src/index.js --dry-run --cover-letters   # preview which letters would be written, no spend
+node src/index.js --cover-letters             # generate + save + post cover letters
+```
+
+Capped at `APPLY_MAX` per run (default 5). This runs off the same deduped
+"new matches" set, so each posting gets a letter once.
+
 ## Auto-apply (opt-in)
 
 Given your résumé, the agent can also **prepare a tailored, ready-to-submit

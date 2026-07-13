@@ -1,18 +1,25 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { fileURLToPath as _fileURLToPath } from "node:url";
 import { applyToJobs } from "./apply.js";
 import { pollBoards } from "./boards.js";
+import { generateCoverLetters } from "./coverletter.js";
 import { makeDb } from "./db.js";
-import { postApplication, postToDiscord } from "./discord.js";
+import { postApplication, postCoverLetter, postToDiscord } from "./discord.js";
 import { loadApplicant } from "./resume.js";
 import { scoreJob } from "./score.js";
 import { getSubmitter } from "./submit.js";
 
 const DRY_RUN = process.argv.includes("--dry-run") || process.env.DRY_RUN === "1";
 const APPLY = process.argv.includes("--apply") || process.env.AUTO_APPLY === "1";
+const COVER_LETTERS =
+    process.argv.includes("--cover-letters") || process.env.COVER_LETTERS === "1";
 const POST_THRESHOLD = 7;
 const APPLY_THRESHOLD = Number(process.env.APPLY_THRESHOLD) || POST_THRESHOLD;
 const APPLY_MAX = Number(process.env.APPLY_MAX) || 5;
+const COVER_LETTER_DIR = process.env.COVER_LETTER_DIR
+    ? process.env.COVER_LETTER_DIR
+    : _fileURLToPath(new URL("../cover-letters", import.meta.url));
 
 function loadCompanies() {
     const path = fileURLToPath(new URL("../companies.json", import.meta.url));
@@ -43,19 +50,29 @@ async function main() {
         for (const job of jobs) {
             console.log(`  [${job.source}] ${job.title} @ ${job.company} — ${job.url}`);
         }
-        if (APPLY) {
+        if (APPLY || COVER_LETTERS) {
             // Read-only preview: validates the resume/profile load and reports
-            // how many fields each posting's form has. No scoring/Claude/DB.
+            // what would be produced. No scoring/Claude/DB.
             const applicant = loadApplicant();
             console.log(
                 `Loaded resume for ${applicant.profile.firstName} ${applicant.profile.lastName} (${applicant.resumeText.length} chars).`,
             );
-            await applyToJobs({
-                matched: jobs.map((job) => ({ job })),
-                applicant,
-                cap: APPLY_MAX,
-                dryRun: true,
-            });
+            if (APPLY) {
+                await applyToJobs({
+                    matched: jobs.map((job) => ({ job })),
+                    applicant,
+                    cap: APPLY_MAX,
+                    dryRun: true,
+                });
+            }
+            if (COVER_LETTERS) {
+                await generateCoverLetters({
+                    matched: jobs.map((job) => ({ job })),
+                    applicant,
+                    cap: APPLY_MAX,
+                    dryRun: true,
+                });
+            }
         }
         console.log(
             `Summary: companies=${companies.length} matched=${jobs.length} new=? posted=? (dry run: no DB/scoring/Discord)`,
@@ -94,31 +111,49 @@ async function main() {
             const ok = await postToDiscord(process.env.DISCORD_WEBHOOK_URL, job, scored);
             if (ok) posted++;
         }
-        if (APPLY && scored.score >= APPLY_THRESHOLD) applyCandidates.push({ job, scored });
+        if ((APPLY || COVER_LETTERS) && scored.score >= APPLY_THRESHOLD) {
+            applyCandidates.push({ job, scored });
+        }
     }
 
-    // 9. Auto-apply (opt-in): prepare a tailored, review-ready application from
-    // the resume for each strong match, dedup'd and capped.
+    // 9. From the resume (opt-in): generate tailored cover letters and/or
+    // prepare review-ready applications for each strong match. Both operate on
+    // the already-deduped new matches and share the resume/profile load.
     let applyResult = { prepared: 0, submitted: 0 };
-    if (APPLY) {
+    let coverResult = { written: 0 };
+    if (APPLY || COVER_LETTERS) {
         const applicant = loadApplicant();
-        const submitter = getSubmitter();
-        applyResult = await applyToJobs({
-            matched: applyCandidates,
-            applicant,
-            db,
-            submitter,
-            apiKey: process.env.ANTHROPIC_API_KEY,
-            webhookUrl: process.env.DISCORD_WEBHOOK_URL,
-            postApplication,
-            cap: APPLY_MAX,
-            dryRun: false,
-        });
+        if (COVER_LETTERS) {
+            coverResult = await generateCoverLetters({
+                matched: applyCandidates,
+                applicant,
+                apiKey: process.env.ANTHROPIC_API_KEY,
+                outDir: COVER_LETTER_DIR,
+                webhookUrl: process.env.DISCORD_WEBHOOK_URL,
+                postCoverLetter,
+                cap: APPLY_MAX,
+                dryRun: false,
+            });
+        }
+        if (APPLY) {
+            applyResult = await applyToJobs({
+                matched: applyCandidates,
+                applicant,
+                db,
+                submitter: getSubmitter(),
+                apiKey: process.env.ANTHROPIC_API_KEY,
+                webhookUrl: process.env.DISCORD_WEBHOOK_URL,
+                postApplication,
+                cap: APPLY_MAX,
+                dryRun: false,
+            });
+        }
     }
 
     // 8. One-line summary.
     console.log(
         `Summary: companies=${companies.length} matched=${jobs.length} new=${newJobs.length} posted=${posted}` +
+            (COVER_LETTERS ? ` coverLetters=${coverResult.written}` : "") +
             (APPLY ? ` applications=${applyResult.prepared} submitted=${applyResult.submitted}` : ""),
     );
 }
