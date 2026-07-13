@@ -1,3 +1,4 @@
+import "./loadenv.js"; // must be first: populates process.env from .env before any reads
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { applyToJobs, dailyBudget, startOfUtcDay } from "./apply.js";
