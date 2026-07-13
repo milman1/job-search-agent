@@ -124,11 +124,10 @@ Your résumé can be a single **PDF**: set `RESUME_FILE=resume.pdf` (or
 *and* uploads the file itself in browser mode — no separate `resume.txt` needed.
 
 `profile.json`, `resume.txt`, and common résumé file names are git-ignored so
-your personal data is never committed. The `applications` table must exist with
-a UNIQUE constraint on `url`, a `created_at timestamptz default now()` column
-(used for the daily budget), and columns: `id, url, title, company, source,
-ready, submitted, status, review_url, missing_fields, cover_letter, answers,
-created_at`.
+your personal data is never committed. The `applications` table must exist
+before you run with `--apply` — create it (and `job_leads`) from
+[`schema.sql`](schema.sql). It has a UNIQUE constraint on `url` and a
+`created_at timestamptz default now()` column that powers the daily budget.
 
 ## Deploy on Railway (two steps)
 
@@ -145,9 +144,9 @@ That's it — the service runs `npm start` on the schedule and exits.
 > daylight saving but 6am ET in winter; switch to `0 12 * * 1-5` each
 > November if you want a constant 7am.
 
-The `job_leads` table must already exist with a UNIQUE constraint on `url`
-and columns: `id, title, company, url, source, score, verdict, top_angle,
-watch_point, salary_fit, status, created_at`.
+The `job_leads` table must already exist (UNIQUE constraint on `url`). Create
+it — and the optional `applications` table used by `--apply` — by running
+[`schema.sql`](schema.sql) once in the Supabase SQL Editor (or via `psql`).
 
 ## Adding companies
 
@@ -167,6 +166,8 @@ harmless — they 404 and get skipped.
 ```bash
 npm install
 cp .env.example .env   # fill in keys
+# One-time: create the Supabase tables (job_leads, applications).
+#   Supabase SQL Editor -> paste schema.sql -> Run   (or: psql "$DATABASE_URL" -f schema.sql)
 npm start              # full run: scores, inserts, posts to Discord
 npm start -- --dry-run # poll + filter only; prints matches, touches nothing
 npm test
