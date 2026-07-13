@@ -140,6 +140,12 @@ before you run with `--apply` — create it (and `job_leads`) from
 
 That's it — the service runs `npm start` on the schedule and exits.
 
+> **Anthropic key name:** the app reads `ANTHROPIC_API_KEY`. If your host
+> already occupies that name with its own platform key (some managed agent
+> environments do), set `JOB_AGENT_ANTHROPIC_KEY` instead — it takes
+> precedence. Railway does not have this collision, so `ANTHROPIC_API_KEY` is
+> all you need there.
+
 > **Timezone note:** Railway cron is UTC. `0 11 * * 1-5` is 7am ET during
 > daylight saving but 6am ET in winter; switch to `0 12 * * 1-5` each
 > November if you want a constant 7am.

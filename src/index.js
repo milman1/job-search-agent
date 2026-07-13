@@ -5,6 +5,7 @@ import { pollBoards } from "./boards.js";
 import { generateCoverLetters } from "./coverletter.js";
 import { makeDb } from "./db.js";
 import { postApplication, postCoverLetter, postToDiscord } from "./discord.js";
+import { resolveAnthropicKey } from "./env.js";
 import { loadApplicant } from "./resume.js";
 import { scoreJob } from "./score.js";
 import { getSubmitter } from "./submit.js";
@@ -81,7 +82,13 @@ async function main() {
         return;
     }
 
-    requireEnv(["ANTHROPIC_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_KEY"]);
+    requireEnv(["SUPABASE_URL", "SUPABASE_SERVICE_KEY"]);
+    const anthropicKey = resolveAnthropicKey();
+    if (!anthropicKey) {
+        throw new Error(
+            "Missing Anthropic API key: set ANTHROPIC_API_KEY (or JOB_AGENT_ANTHROPIC_KEY).",
+        );
+    }
     if (!process.env.DISCORD_WEBHOOK_URL) {
         console.log("DISCORD_WEBHOOK_URL not set; alerts will be skipped.");
     }
@@ -95,7 +102,7 @@ async function main() {
     let posted = 0;
     const applyCandidates = [];
     for (const job of newJobs) {
-        const scored = await scoreJob(job, process.env.ANTHROPIC_API_KEY);
+        const scored = await scoreJob(job, anthropicKey);
         await db.insertLead({
             title: job.title,
             company: job.company,
@@ -128,7 +135,7 @@ async function main() {
             coverResult = await generateCoverLetters({
                 matched: applyCandidates,
                 applicant,
-                apiKey: process.env.ANTHROPIC_API_KEY,
+                apiKey: anthropicKey,
                 outDir: COVER_LETTER_DIR,
                 webhookUrl: process.env.DISCORD_WEBHOOK_URL,
                 postCoverLetter,
@@ -153,7 +160,7 @@ async function main() {
                     applicant,
                     db,
                     submitter: await getSubmitter(),
-                    apiKey: process.env.ANTHROPIC_API_KEY,
+                    apiKey: anthropicKey,
                     webhookUrl: process.env.DISCORD_WEBHOOK_URL,
                     postApplication,
                     cap,
