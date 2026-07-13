@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { fileURLToPath as _fileURLToPath } from "node:url";
 import { applyToJobs, dailyBudget, startOfUtcDay } from "./apply.js";
 import { pollBoards } from "./boards.js";
 import { generateCoverLetters } from "./coverletter.js";
@@ -21,7 +20,7 @@ const APPLY_MAX = Number(process.env.APPLY_MAX) || 5;
 const APPLY_DAILY_MAX = Number(process.env.APPLY_DAILY_MAX) || 3;
 const COVER_LETTER_DIR = process.env.COVER_LETTER_DIR
     ? process.env.COVER_LETTER_DIR
-    : _fileURLToPath(new URL("../cover-letters", import.meta.url));
+    : fileURLToPath(new URL("../cover-letters", import.meta.url));
 
 function loadCompanies() {
     const path = fileURLToPath(new URL("../companies.json", import.meta.url));
