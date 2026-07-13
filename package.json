@@ -12,6 +12,8 @@
         "test": "node --test"
     },
     "dependencies": {
-        "@supabase/supabase-js": "^2.49.8"
+        "@supabase/supabase-js": "^2.49.8",
+        "pdf-parse": "^2.4.5",
+        "playwright-core": "^1.61.1"
     }
 }

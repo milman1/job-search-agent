@@ -25,6 +25,110 @@ Discord.
    for 7) with verdict, angle, watch point, and apply link.
 8. **Summary** line: `Summary: companies=N matched=N new=N posted=N`.
 
+## Cover letters (opt-in)
+
+Given your résumé, the agent can generate a **tailored cover letter for every
+strong match** and provide it to you. Enable with `--cover-letters` or
+`COVER_LETTERS=1`. For each new match scoring ≥ `APPLY_THRESHOLD` (default 7) it
+asks Claude to write a concise, first-person letter grounded strictly in your
+résumé (no invented employers, titles, or metrics), then **delivers it**:
+
+- **Saved to a file** at `cover-letters/<company>-<title>.md` (dir configurable
+  via `COVER_LETTER_DIR`; git-ignored so résumé-derived content isn't
+  committed).
+- **Posted to Discord** as an embed with the letter and the apply link.
+
+```bash
+cp profile.example.json profile.json    # your details (git-ignored)
+cp resume.example.txt resume.txt          # your résumé as plain text (git-ignored)
+node src/index.js --dry-run --cover-letters   # preview which letters would be written, no spend
+node src/index.js --cover-letters             # generate + save + post cover letters
+```
+
+Capped at `APPLY_MAX` per run (default 5). This runs off the same deduped
+"new matches" set, so each posting gets a letter once.
+
+## Auto-apply (opt-in)
+
+Given your résumé, the agent can also **prepare a tailored, ready-to-submit
+application** for every strong match — not just alert you. Enable it with the
+`--apply` flag or `AUTO_APPLY=1`. For each new match scoring ≥ `APPLY_THRESHOLD`
+(default 7), it:
+
+1. **Fetches the posting's real application form.** Greenhouse exposes every
+   field via `?questions=true` (name, email, résumé, cover letter, and custom
+   dropdown/free-text questions). Lever hides custom questions from its public
+   API, so those forms get the standard fields and are always flagged for a
+   quick human look.
+2. **Auto-fills the standard fields** (name, email, phone, links, résumé)
+   from `profile.json` + your résumé.
+3. **Drafts the rest with Claude:** an answer to every custom question, grounded
+   in your résumé, plus a cover letter **only when the form requires one**.
+   Dropdown answers are validated against the real options — an unmatched answer
+   is dropped rather than submitted.
+4. **Records + posts each application**, dedup'd against the `applications`
+   table. Capped at `APPLY_MAX` per run (default 5) **and `APPLY_DAILY_MAX` per
+   day across runs (default 3)** — "a few a day." Posts to Discord showing what
+   was filled, what still needs you, and the link.
+
+### Submission backends (`APPLY_MODE`)
+
+Fully unattended, no-human submission isn't possible (or ToS-compliant) via the
+public APIs: Greenhouse submission needs the **employer's** private Board Token,
+and Lever's form is reCAPTCHA-protected. So the final click is always yours —
+but where that click happens is configurable via `src/submit.js`:
+
+- **`prepare`** (default) — builds a review-ready packet; you open the link and
+  submit yourself from any device.
+- **`browser`** — **fills the form and uploads your résumé in a hosted cloud
+  browser** ([Browserbase](https://browserbase.com)); captchas are auto-solved
+  (`BROWSERBASE_SOLVE_CAPTCHAS`, on by default). Your computer never has to be
+  on. Requires `BROWSERBASE_API_KEY` + `RESUME_FILE` (your PDF). How the *final
+  submit* happens depends on your Browserbase plan:
+  - **Paid (`BROWSERBASE_KEEP_ALIVE=1`):** the filled session persists after the
+    run, so it posts a **live link** you open on your **phone** to review and tap
+    Submit whenever. This is the "fill now, submit later" flow.
+  - **Free plan:** the session ends when the run disconnects. Browser mode
+    **auto-submits by default**: after filling + solving the captcha it clicks
+    Submit for a fully hands-off apply. As a safety, it only submits when every
+    required field was filled — incomplete forms (and all Lever forms, whose
+    questions aren't API-visible) are *held for review* and surfaced in Discord
+    instead of submitted blind. Set `BROWSER_AUTO_SUBMIT=0` to switch to
+    review-only, optionally with `BROWSER_REVIEW_WINDOW=300` to hold the session
+    open ~5 min so you can submit from the live link while it's alive.
+  > Note: this path talks to your Browserbase account and the live form, so it
+  > could not be exercised in CI; field-filling and the submit click are
+  > best-effort, and anything that doesn't stick (e.g. custom dropdown widgets)
+  > is left for your review.
+- **`greenhouse-api`** — POSTs ready packets using an employer/ATS-owner
+  Greenhouse Board Token (`GREENHOUSE_BOARD_TOKEN`). Not available to job seekers.
+
+### Setup
+
+```bash
+cp profile.example.json profile.json   # your details (git-ignored)
+# Provide your résumé as a PDF — its text is auto-extracted for the AI and the
+# same file is uploaded into forms. (A plain-text resume.txt also works.)
+export RESUME_FILE=resume.pdf
+node src/index.js --dry-run --apply     # preview: lists forms + field counts, no spend
+node src/index.js --apply               # full run (prepare mode by default)
+
+# Hands-off cloud browser + phone approval, a few a day, PDF upload:
+export APPLY_MODE=browser
+export BROWSERBASE_API_KEY=...          # project id is inferred from the key
+node src/index.js --apply
+```
+
+Your résumé can be a single **PDF**: set `RESUME_FILE=resume.pdf` (or
+`"resumeFile"` in `profile.json`) and the tool extracts its text for tailoring
+*and* uploads the file itself in browser mode — no separate `resume.txt` needed.
+
+`profile.json`, `resume.txt`, and common résumé file names are git-ignored so
+your personal data is never committed. The `applications` table must exist
+before you run with `--apply` — create it (and `job_leads`) from
+[`schema.sql`](schema.sql). It has a UNIQUE constraint on `url` and a
+`created_at timestamptz default now()` column that powers the daily budget.
+
 ## Deploy on Railway (two steps)
 
 1. Create a new Railway project from this GitHub repo. The included
@@ -40,9 +144,9 @@ That's it — the service runs `npm start` on the schedule and exits.
 > daylight saving but 6am ET in winter; switch to `0 12 * * 1-5` each
 > November if you want a constant 7am.
 
-The `job_leads` table must already exist with a UNIQUE constraint on `url`
-and columns: `id, title, company, url, source, score, verdict, top_angle,
-watch_point, salary_fit, status, created_at`.
+The `job_leads` table must already exist (UNIQUE constraint on `url`). Create
+it — and the optional `applications` table used by `--apply` — by running
+[`schema.sql`](schema.sql) once in the Supabase SQL Editor (or via `psql`).
 
 ## Adding companies
 
@@ -62,6 +166,8 @@ harmless — they 404 and get skipped.
 ```bash
 npm install
 cp .env.example .env   # fill in keys
+# One-time: create the Supabase tables (job_leads, applications).
+#   Supabase SQL Editor -> paste schema.sql -> Run   (or: psql "$DATABASE_URL" -f schema.sql)
 npm start              # full run: scores, inserts, posts to Discord
 npm start -- --dry-run # poll + filter only; prints matches, touches nothing
 npm test

@@ -1,0 +1,15 @@
+{
+  "firstName": "Avi",
+  "lastName": "Milman",
+  "email": "avi@example.com",
+  "phone": "+1 555 123 4567",
+  "location": "New York, NY",
+  "linkedin": "https://www.linkedin.com/in/example",
+  "github": "",
+  "website": "https://example.com",
+  "workAuthorization": "US citizen",
+  "requiresSponsorship": false,
+  "salaryExpectation": "180000",
+  "yearsExperience": 10,
+  "resumeFile": "resume.pdf"
+}
