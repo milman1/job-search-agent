@@ -169,12 +169,17 @@ add these variables alongside the four above:
 | `BROWSER_AUTO_SUBMIT` | `0` **recommended to start** — fills the form then posts a link for you to approve + submit; set `1` only for fully hands-off, irreversible auto-submit |
 | `APPLY_DAILY_MAX` | applications per day across runs (default 3) |
 
-> **Your résumé and `profile.json` must be present in the container.** They are
+> **Your résumé and `profile.json` must reach the container.** They are
 > git-ignored, so a fresh Railway deploy won't include them and the apply step
-> will error on load. Either commit them to this **private** repo (and set
-> `RESUME_FILE` to the PDF's path), or provision them from env at startup so
-> personal files stay out of git. Auto-apply stays off until `AUTO_APPLY=1`, so
-> scoring + Discord alerts work with none of this configured.
+> will error on load. Two options:
+> - **Commit them** to this **private** repo and set `RESUME_FILE` to the PDF's path.
+> - **Provision from env** (keeps personal files out of git): set `PROFILE_JSON`
+>   (inline profile contents) and `RESUME_PDF_BASE64` (`base64 -w0 resume.pdf`)
+>   — or `RESUME_TEXT` if you have no PDF — and the app writes them to disk at
+>   startup.
+>
+> Auto-apply stays off until `AUTO_APPLY=1`, so scoring + Discord alerts work
+> with none of this configured.
 
 ## Adding companies
 

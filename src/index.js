@@ -6,6 +6,7 @@ import { generateCoverLetters } from "./coverletter.js";
 import { makeDb } from "./db.js";
 import { postApplication, postCoverLetter, postToDiscord } from "./discord.js";
 import { resolveAnthropicKey } from "./env.js";
+import { provisionApplicantFiles } from "./provision.js";
 import { loadApplicant } from "./resume.js";
 import { scoreJob } from "./score.js";
 import { getSubmitter } from "./submit.js";
@@ -40,6 +41,15 @@ function requireEnv(names) {
 }
 
 async function main() {
+    // Hydrate git-ignored personal files (profile/resume) from env when set, so
+    // apply mode works on ephemeral hosts without committing them. No-op locally.
+    if (APPLY || COVER_LETTERS) {
+        const provisioned = provisionApplicantFiles();
+        if (provisioned.length) {
+            console.log(`Provisioned from env: ${provisioned.join(", ")}`);
+        }
+    }
+
     const companies = loadCompanies();
 
     // 1-3. Poll boards, filter titles, normalize + build jdText.
