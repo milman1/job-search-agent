@@ -123,6 +123,23 @@ Your résumé can be a single **PDF**: set `RESUME_FILE=resume.pdf` (or
 `"resumeFile"` in `profile.json`) and the tool extracts its text for tailoring
 *and* uploads the file itself in browser mode — no separate `resume.txt` needed.
 
+### Deploying auto-apply (Railway, etc.)
+
+`profile.json` and your résumé are git-ignored (they're PII), so they aren't in
+the deployed build. On a host without those files, provide them via env vars
+instead — no files committed:
+
+- `PROFILE_JSON` — the profile JSON inline as a string.
+- `RESUME_BASE64` — your résumé file base64-encoded (`base64 -w0 resume.pdf`),
+  or `RESUME_URL` to download it at runtime (`RESUME_BASE64` avoids hosting the
+  file, but the encoded string is large — use `RESUME_URL` if your host caps
+  env-var size). Optionally `RESUME_FILENAME` to set the extension.
+- `RESUME_TEXT` — optional; supply résumé text directly to skip PDF extraction.
+
+The provisioned résumé is written to a temp file at runtime so it can still be
+uploaded into forms and have its text extracted. Also remember to set
+`AUTO_APPLY=1` (the Railway `npm start` command has no `--apply` flag).
+
 `profile.json`, `resume.txt`, and common résumé file names are git-ignored so
 your personal data is never committed. The `applications` table must exist
 before you run with `--apply` — create it (and `job_leads`) from

@@ -1,4 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Standard profile fields the apply pipeline knows how to map onto ATS forms.
@@ -59,16 +61,50 @@ async function loadResumeText(path, label) {
     return readTextFile(path, label).trim();
 }
 
+// On hosts like Railway the profile/resume files aren't in the repo (they're
+// PII and git-ignored), so allow supplying them via env: PROFILE_JSON inline,
+// and the resume as RESUME_BASE64 or RESUME_URL (materialized to a temp file so
+// it can be uploaded and its text extracted).
+function loadProfileRaw(env) {
+    if (env.PROFILE_JSON) return env.PROFILE_JSON;
+    return readTextFile(resolvePath(env.PROFILE_PATH || "profile.json"), "profile");
+}
+
+async function materializeResumeFile(env, profile) {
+    const fileRaw = env.RESUME_FILE || profile.resumeFile;
+    if (fileRaw) {
+        const resolved = resolvePath(fileRaw);
+        if (!existsSync(resolved)) {
+            throw new Error(`RESUME_FILE points to a missing file: ${resolved}`);
+        }
+        return resolved;
+    }
+
+    const ext = (env.RESUME_FILENAME || "resume.pdf").split(".").pop();
+    const tmpPath = join(tmpdir(), `agent-resume.${ext}`);
+
+    if (env.RESUME_BASE64) {
+        writeFileSync(tmpPath, Buffer.from(env.RESUME_BASE64, "base64"));
+        return tmpPath;
+    }
+    if (env.RESUME_URL) {
+        const res = await fetch(env.RESUME_URL, { signal: AbortSignal.timeout(30_000) });
+        if (!res.ok) throw new Error(`RESUME_URL fetch failed: HTTP ${res.status}`);
+        writeFileSync(tmpPath, Buffer.from(await res.arrayBuffer()));
+        return tmpPath;
+    }
+    return null;
+}
+
 export async function loadApplicant(env = process.env) {
-    const profilePath = resolvePath(env.PROFILE_PATH || "profile.json");
-    const profileRaw = readTextFile(profilePath, "profile");
+    const profileRaw = loadProfileRaw(env);
 
     let profile;
     try {
         profile = JSON.parse(profileRaw);
     } catch (err) {
         throw new Error(
-            `profile.json is not valid JSON: ${err instanceof Error ? err.message : err}`,
+            `profile is not valid JSON: ${err instanceof Error ? err.message : err}`,
         );
     }
 
@@ -76,17 +112,19 @@ export async function loadApplicant(env = process.env) {
         (field) => !profile[field] || String(profile[field]).trim() === "",
     );
     if (missing.length > 0) {
-        throw new Error(`profile.json is missing required fields: ${missing.join(", ")}`);
+        throw new Error(`profile is missing required fields: ${missing.join(", ")}`);
     }
 
     // The file uploaded into application forms (e.g. a PDF), if provided.
-    let resumeFile = null;
-    const resumeFileRaw = env.RESUME_FILE || profile.resumeFile;
-    if (resumeFileRaw) {
-        resumeFile = resolvePath(resumeFileRaw);
-        if (!existsSync(resumeFile)) {
-            throw new Error(`RESUME_FILE points to a missing file: ${resumeFile}`);
-        }
+    const resumeFile = await materializeResumeFile(env, profile);
+
+    // Inline resume text (RESUME_TEXT) short-circuits file/PDF loading.
+    if (env.RESUME_TEXT) {
+        let resumeText = env.RESUME_TEXT.trim();
+        if (!resumeText) throw new Error("RESUME_TEXT is empty");
+        if (resumeText.length > RESUME_MAX_CHARS) resumeText = resumeText.slice(0, RESUME_MAX_CHARS);
+        const resumeFilename = (resumeFile || "resume.txt").split("/").pop();
+        return { profile, resumeText, resumeFilename, resumeFile };
     }
 
     // Where the resume TEXT comes from. Precedence: an explicit RESUME_PATH /
