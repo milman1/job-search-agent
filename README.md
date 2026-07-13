@@ -81,14 +81,23 @@ but where that click happens is configurable via `src/submit.js`:
 - **`prepare`** (default) — builds a review-ready packet; you open the link and
   submit yourself from any device.
 - **`browser`** — **fills the form and uploads your résumé in a hosted cloud
-  browser** ([Browserbase](https://browserbase.com)), then posts you a **live
-  session link**. Open it on your **phone**, clear the reCAPTCHA, and tap Submit.
-  Your computer never has to be on. Requires `BROWSERBASE_API_KEY`,
-  `BROWSERBASE_PROJECT_ID`, and `RESUME_FILE` (your PDF). Nothing auto-submits —
-  the final click stays with you.
+  browser** ([Browserbase](https://browserbase.com)); captchas are auto-solved
+  (`BROWSERBASE_SOLVE_CAPTCHAS`, on by default). Your computer never has to be
+  on. Requires `BROWSERBASE_API_KEY` + `RESUME_FILE` (your PDF). How the *final
+  submit* happens depends on your Browserbase plan:
+  - **Paid (`BROWSERBASE_KEEP_ALIVE=1`):** the filled session persists after the
+    run, so it posts a **live link** you open on your **phone** to review and tap
+    Submit whenever. This is the "fill now, submit later" flow.
+  - **Free plan:** the session ends when the run disconnects, so pick one:
+    - `BROWSER_REVIEW_WINDOW=300` — holds the session open ~5 min after filling
+      and posts the live link so you can submit from your phone *while it's live*.
+    - `BROWSER_AUTO_SUBMIT=1` — after filling + solving the captcha, clicks Submit
+      for a fully hands-off apply. **This sends the application without your
+      review** — use with care.
   > Note: this path talks to your Browserbase account and the live form, so it
-  > could not be exercised in CI; the field-filling is best-effort and anything
-  > that doesn't stick (e.g. custom dropdown widgets) is left for your review.
+  > could not be exercised in CI; field-filling and the submit click are
+  > best-effort, and anything that doesn't stick (e.g. custom dropdown widgets)
+  > is left for your review.
 - **`greenhouse-api`** — POSTs ready packets using an employer/ATS-owner
   Greenhouse Board Token (`GREENHOUSE_BOARD_TOKEN`). Not available to job seekers.
 

@@ -1,16 +1,23 @@
 // Cloud browser worker (Browserbase + Playwright). It fills each application
-// form and uploads the resume file in a remote browser, then leaves the session
-// alive and hands back a shareable live-view URL so you can solve the reCAPTCHA
-// and hit Submit from any device (e.g. your phone). Your computer stays off.
+// form and uploads the resume file in a remote browser. What happens next
+// depends on your plan/config:
 //
-// Nothing here auto-submits — the final click is always yours, which is both
-// what these sites require (captcha) and the safe default.
+//   * Paid Browserbase (keepAlive): the session outlives our run, so we hand
+//     back a live-view link and you finish on your phone whenever.
+//   * Free Browserbase: the session ends when our run disconnects, so we either
+//     hold the connection open for a short review window (BROWSER_REVIEW_WINDOW)
+//     while you act via the live link, or auto-submit (BROWSER_AUTO_SUBMIT) with
+//     captcha solving so it's fully hands-off.
+//
+// Captcha solving (browserSettings.solveCaptchas) is on by default.
 //
 // NOTE: live submission depends on your Browserbase account and a real form, so
-// this path could not be exercised in the build environment; the fill logic is
-// best-effort and logs per-field outcomes.
+// this path could not be exercised in the build environment; the fill + submit
+// logic is best-effort and logs per-field outcomes.
 
 const BROWSERBASE_API = "https://api.browserbase.com/v1";
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Candidate CSS selectors for a form field, most specific first. Greenhouse and
 // Lever both expose `name` attributes matching the API field names, and often
@@ -20,6 +27,20 @@ export function fieldSelectors(name) {
     const raw = name.replace(/\[\]$/, "");
     const idSafe = raw.replace(/[^a-zA-Z0-9_-]/g, "\\$&");
     return [...new Set([`[name="${name}"]`, `[name="${raw}"]`, `#${idSafe}`])];
+}
+
+// Common "submit / apply" button selectors, most specific first. Pure +
+// exported for testing.
+export function submitButtonSelectors() {
+    return [
+        'button[type="submit"]',
+        'input[type="submit"]',
+        "button#submit_app",
+        'button:has-text("Submit Application")',
+        'button:has-text("Submit application")',
+        'button:has-text("Submit")',
+        'button:has-text("Apply")',
+    ];
 }
 
 async function firstVisible(page, selectors) {
@@ -75,13 +96,29 @@ export async function fillForm(page, packet, resumeFile) {
     return { filled, failed };
 }
 
+async function clickSubmit(page) {
+    const button = await firstVisible(page, submitButtonSelectors());
+    if (!button) return false;
+    try {
+        await button.click({ timeout: 15_000 });
+        // Give the form a moment to post / navigate before we disconnect.
+        await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 async function createSession(env) {
     const timeout = Number(env.BROWSERBASE_TIMEOUT) || 3600;
     const payload = {
-        // keepAlive lets the session outlive our process so you can take over
-        // later from your phone (requires a paid Browserbase plan).
-        keepAlive: true,
+        // keepAlive keeps the session alive after we disconnect so you can take
+        // over later from your phone — but it's a PAID Browserbase feature, so
+        // it's opt-in and off by default (free plans can't use it).
+        keepAlive: env.BROWSERBASE_KEEP_ALIVE === "1",
         timeout,
+        // Let Browserbase attempt captchas automatically (on unless disabled).
+        browserSettings: { solveCaptchas: env.BROWSERBASE_SOLVE_CAPTCHAS !== "0" },
     };
     // projectId is optional — Browserbase infers it from the API key.
     if (env.BROWSERBASE_PROJECT_ID) payload.projectId = env.BROWSERBASE_PROJECT_ID;
@@ -109,13 +146,18 @@ async function liveViewUrl(sessionId, env) {
     return data.debuggerFullscreenUrl || data.debuggerUrl || null;
 }
 
-// Builds a submitter that fills the form in a remote browser and returns a
-// review link. Requires Browserbase creds + playwright-core; the caller
-// (getSubmitter) falls back to prepare mode when they're missing.
+// Builds a submitter that fills the form in a remote browser. Requires
+// Browserbase creds + playwright-core; the caller (getSubmitter) falls back to
+// prepare mode when they're missing. `notify(packet, result)` (optional) is
+// called as soon as the review link is ready so free-plan users can act during
+// the open review window.
 export function browserSubmitter(env) {
+    const autoSubmit = env.BROWSER_AUTO_SUBMIT === "1";
+    const reviewWindowMs = (Number(env.BROWSER_REVIEW_WINDOW) || 0) * 1000;
+
     return {
         mode: "browser",
-        async submit(packet, { applicant } = {}) {
+        async submit(packet, { applicant, notify } = {}) {
             let chromium;
             try {
                 ({ chromium } = await import("playwright-core"));
@@ -138,17 +180,41 @@ export function browserSubmitter(env) {
                 await page.goto(packet.applyUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
                 const { filled, failed } = await fillForm(page, packet, applicant?.resumeFile);
                 const reviewUrl = await liveViewUrl(session.id, env);
-                return {
+
+                if (autoSubmit) {
+                    const clicked = await clickSubmit(page);
+                    const result = {
+                        submitted: clicked,
+                        status: clicked ? "submitted-auto" : "submit-button-not-found",
+                        reviewUrl,
+                        sessionId: session.id,
+                        detail: `filled ${filled} field(s), ${failed} skipped`,
+                    };
+                    if (notify) {
+                        await notify(packet, result);
+                        result.notified = true;
+                    }
+                    return result;
+                }
+
+                const result = {
                     submitted: false,
                     status: "awaiting-review",
                     reviewUrl,
                     sessionId: session.id,
                     detail: `filled ${filled} field(s), ${failed} left for review`,
                 };
+                // Post the review link now, then hold the connection open so a
+                // free-plan session stays alive while you act on your phone.
+                if (notify) {
+                    await notify(packet, result);
+                    result.notified = true;
+                }
+                if (reviewWindowMs > 0) await sleep(reviewWindowMs);
+                return result;
             } catch (err) {
                 return { submitted: false, status: "fill-failed", detail: String(err.message || err) };
             } finally {
-                // Disconnect but leave the (keepAlive) session running for you.
                 if (browser) await browser.close().catch(() => {});
             }
         },

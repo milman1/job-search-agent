@@ -105,12 +105,15 @@ export async function applyToJobs({
             continue;
         }
 
-        const result = await submitter.submit(packet, { applicant });
+        const notify = webhookUrl ? (pkt, res) => postApplication(webhookUrl, pkt, res) : null;
+        const result = await submitter.submit(packet, { applicant, notify });
         prepared++;
         if (result.submitted) submitted++;
 
         await db.insertApplication(applicationRow(packet, result));
-        if (webhookUrl) await postApplication(webhookUrl, packet, result);
+        // Some submitters (browser mode) post the Discord alert themselves so
+        // the review link is live during the open session; avoid double-posting.
+        if (webhookUrl && !result.notified) await postApplication(webhookUrl, packet, result);
 
         const state = result.submitted
             ? "submitted"

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildCoverLetterPrompt, parseAnswerResponse } from "../src/answer.js";
 import { dailyBudget } from "../src/apply.js";
-import { fieldSelectors } from "../src/browser.js";
+import { fieldSelectors, submitButtonSelectors } from "../src/browser.js";
 import { coverLetterSlug, renderCoverLetterFile } from "../src/coverletter.js";
 import { buildApplicationEmbed, buildCoverLetterEmbed } from "../src/discord.js";
 import { assemblePacket, coverLetterRequired, questionsToAnswer } from "../src/packet.js";
@@ -268,6 +268,12 @@ test("fieldSelectors returns name and id candidates, handling [] suffix", () => 
     assert.ok(multi.includes('[name="question_9[]"]'));
     assert.ok(multi.includes('[name="question_9"]'));
     assert.ok(multi.includes("#question_9"));
+});
+
+test("submitButtonSelectors lists submit/apply candidates", () => {
+    const sels = submitButtonSelectors();
+    assert.ok(sels.includes('button[type="submit"]'));
+    assert.ok(sels.some((s) => /Submit Application/.test(s)));
 });
 
 test("buildCoverLetterEmbed formats title, body, and apply link", () => {
