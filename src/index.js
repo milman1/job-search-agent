@@ -9,6 +9,7 @@ import { postApplication, postCoverLetter, postToDiscord } from "./discord.js";
 import { resolveAnthropicKey } from "./env.js";
 import { provisionApplicantFiles } from "./provision.js";
 import { loadApplicant } from "./resume.js";
+import { belowSalaryFloor } from "./salary.js";
 import { scoreJob } from "./score.js";
 import { getSubmitter } from "./submit.js";
 
@@ -17,6 +18,10 @@ const APPLY = process.argv.includes("--apply") || process.env.AUTO_APPLY === "1"
 const COVER_LETTERS =
     process.argv.includes("--cover-letters") || process.env.COVER_LETTERS === "1";
 const POST_THRESHOLD = 7;
+// Hard salary floor: a posting whose KNOWN salary tops out below this is
+// recorded but never alerted/applied, regardless of score. Postings with no
+// listed salary are kept (unknown != below).
+const SALARY_FLOOR = Number(process.env.SALARY_FLOOR) || 175_000;
 const APPLY_THRESHOLD = Number(process.env.APPLY_THRESHOLD) || POST_THRESHOLD;
 const APPLY_MAX = Number(process.env.APPLY_MAX) || 5;
 // "A few a day": cap applications across all of today's runs, not just this one.
@@ -112,8 +117,14 @@ async function main() {
     // 5-7. Score, insert, alert.
     let posted = 0;
     const applyCandidates = [];
+    let belowFloor = 0;
     for (const job of newJobs) {
-        const scored = await scoreJob(job, anthropicKey);
+        const scored = await scoreJob(job, anthropicKey, SALARY_FLOOR);
+        // Hard gate: a posting with a KNOWN salary below the floor is recorded
+        // but never alerted or applied to, whatever it scored.
+        const underPaid = belowSalaryFloor(job, SALARY_FLOOR);
+        if (underPaid) belowFloor++;
+        const qualifies = scored.score >= POST_THRESHOLD && !underPaid;
         await db.insertLead({
             title: job.title,
             company: job.company,
@@ -124,13 +135,18 @@ async function main() {
             top_angle: scored.topAngle,
             watch_point: scored.watchPoint,
             salary_fit: scored.salaryFit,
-            status: scored.score >= POST_THRESHOLD ? "new" : "skipped",
+            status: qualifies ? "new" : "skipped",
         });
-        if (scored.score >= POST_THRESHOLD && process.env.DISCORD_WEBHOOK_URL) {
+        if (underPaid) {
+            console.log(
+                `skip (salary ${job.salary} < ${SALARY_FLOOR}): ${job.title} @ ${job.company}`,
+            );
+        }
+        if (qualifies && process.env.DISCORD_WEBHOOK_URL) {
             const ok = await postToDiscord(process.env.DISCORD_WEBHOOK_URL, job, scored);
             if (ok) posted++;
         }
-        if ((APPLY || COVER_LETTERS) && scored.score >= APPLY_THRESHOLD) {
+        if ((APPLY || COVER_LETTERS) && qualifies && scored.score >= APPLY_THRESHOLD) {
             applyCandidates.push({ job, scored });
         }
     }
@@ -183,7 +199,7 @@ async function main() {
 
     // 8. One-line summary.
     console.log(
-        `Summary: companies=${companies.length} matched=${jobs.length} new=${newJobs.length} posted=${posted}` +
+        `Summary: companies=${companies.length} matched=${jobs.length} new=${newJobs.length} posted=${posted} belowFloor=${belowFloor}` +
             (COVER_LETTERS ? ` coverLetters=${coverResult.written}` : "") +
             (APPLY ? ` applications=${applyResult.prepared} submitted=${applyResult.submitted}` : ""),
     );

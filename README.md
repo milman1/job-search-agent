@@ -21,8 +21,14 @@ Discord.
    score 5 / "Review manually" — nothing is dropped.
 6. **Insert** every scored job into `job_leads` (status `new` for score ≥ 7,
    else `skipped`); duplicate-URL races are ignored.
-7. **Alert**: score ≥ 7 goes to Discord as an embed (green for 8+, yellow
-   for 7) with verdict, angle, watch point, and apply link.
+7. **Salary floor** (`SALARY_FLOOR`, default $175k/yr): a posting whose
+   **listed** salary tops out below the floor is recorded but forced to
+   `skipped` — never alerted or applied to — no matter how it scored. Postings
+   with no listed salary are kept (unknown ≠ below). Only structured salaries
+   are gated: Lever exposes a real range; Greenhouse's API usually doesn't.
+8. **Alert**: score ≥ 7 (and salary not below floor) goes to Discord as an
+   embed (green for 8+, yellow for 7) with verdict, angle, watch point, and
+   apply link.
 8. **Summary** line: `Summary: companies=N matched=N new=N posted=N`.
 
 ## Cover letters (opt-in)

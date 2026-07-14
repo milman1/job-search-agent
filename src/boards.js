@@ -1,4 +1,5 @@
 import { buildJdText, titleMatches } from "./filter.js";
+import { annualizedMax } from "./salary.js";
 
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -36,6 +37,7 @@ async function fetchGreenhouse(slug) {
             url: job.absolute_url,
             location: job.location?.name ?? "",
             salary: "",
+            salaryAnnualMax: null, // Greenhouse API doesn't expose a structured range
             source: "greenhouse",
             slug,
             atsJobId: job.id,
@@ -60,6 +62,7 @@ async function fetchLever(slug) {
             url: job.hostedUrl,
             location: job.categories?.location ?? "",
             salary: formatLeverSalary(job.salaryRange),
+            salaryAnnualMax: annualizedMax(job.salaryRange),
             source: "lever",
             slug,
             atsJobId: job.id,

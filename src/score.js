@@ -9,9 +9,10 @@ export const FALLBACK = Object.freeze({
     salaryFit: null,
 });
 
-function buildPrompt(job) {
+function buildPrompt(job, salaryFloor) {
+    const floorK = Math.round(salaryFloor / 1000);
     return `Score this job for the candidate. Return ONLY valid JSON no markdown.
-CANDIDATE: Avi Milman, Growth Marketing Leader. 10+ years B2B SaaS Fintech. Opto Invest: 1.2M budget, 6.4M pipeline, 3M ARR, CAC -19%, close rate 21 to 29 percent. Founded GTM: 1.8M pipeline 6 months, 15-20 meetings/week. Code Climate: MQL +86%, pipeline +57%. State Street fund ops. Target: Head/VP/Senior Marketing Manager. Salary floor 180K. NYC metro or Remote US.
+CANDIDATE: Avi Milman, Growth Marketing Leader. 10+ years B2B SaaS Fintech. Opto Invest: 1.2M budget, 6.4M pipeline, 3M ARR, CAC -19%, close rate 21 to 29 percent. Founded GTM: 1.8M pipeline 6 months, 15-20 meetings/week. Code Climate: MQL +86%, pipeline +57%. State Street fund ops. Target: Head/VP/Senior Marketing Manager. Salary floor ${floorK}K (minimum acceptable; salaryFit=false below this). NYC metro or Remote US.
 JOB: ${job.title} at ${job.company}
 ${job.jdText}
 Return JSON only with keys: score (number 1-10), verdict (8 words max), topAngle (single best emphasis), watchPoint (gap or none), salaryFit (boolean)`;
@@ -39,7 +40,7 @@ export function parseScoreResponse(text) {
     }
 }
 
-export async function scoreJob(job, apiKey) {
+export async function scoreJob(job, apiKey, salaryFloor = 175_000) {
     try {
         const res = await fetch(ANTHROPIC_URL, {
             method: "POST",
@@ -52,7 +53,7 @@ export async function scoreJob(job, apiKey) {
             body: JSON.stringify({
                 model: MODEL,
                 max_tokens: 400,
-                messages: [{ role: "user", content: buildPrompt(job) }],
+                messages: [{ role: "user", content: buildPrompt(job, salaryFloor) }],
             }),
         });
         if (!res.ok) {
